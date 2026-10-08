@@ -1,26 +1,28 @@
 #include <WiFi.h>
-#include <WebSocketsClient.h>    // BARU: Ditambahkan sesuai alpat-broker
-#include <MQTTPubSubClient.h>    // BARU: Ditambahkan sesuai alpat-broker
+#include <WiFiManager.h>         // Library WiFiManager
+#include <WebSocketsClient.h>    // Library WebSocket untuk WSS
+#include <MQTTPubSubClient.h>    // Library MQTT 
 #include <ArduinoJson.h>
 #include <HLW8012.h>
 
 #define SERIAL_BAUDRATE 115200
 
-//GPIO
+// =====================================================
+// GPIO & HARDWARE CONFIG
+// =====================================================
 #define RELAY_PIN 25
 #define SEL_PIN 26
 #define CF1_PIN 13
 #define CF_PIN 34
 #define LED_PIN 32
 
-//HLW8012 Config
-#define UPDATE_TIME 2000  // ms
+#define UPDATE_TIME 2000  
 #define CURRENT_MODE HIGH
 #define CURRENT_RESISTOR 0.001
-#define VOLTAGE_RESISTOR_UPSTREAM (5 * 470000)  // 2280k
-#define VOLTAGE_RESISTOR_DOWNSTREAM (1000)      // 1k
+#define VOLTAGE_RESISTOR_UPSTREAM (5 * 470000)  
+#define VOLTAGE_RESISTOR_DOWNSTREAM (1000)      
 
-//HLW8012 Variables
+// HLW8012 Variables
 float activePower, voltage, current;
 float activePowerCalibrated, voltageCalibrated, currentCalibrated;
 char bufferActivePower[12];
@@ -32,81 +34,45 @@ char bufferCurrentCalibrated[12];
 char bufferJSON[256];
 unsigned long prevMillis;
 
-//Wifi Config
-const char* ssid = "V";
-const char* password = "528491Vian";
+// HLW8012 Calibration
+struct Calibration {
+  double a; double b; double c; double d; double e;
+};
+Calibration currentCalc = { 0.000520401296, -0.008096351376, 0.0384854598, 0.3661410109, 0.0435};  
+Calibration voltageCalc = { -0.18958, 80.35625, -8281.21667, 0, 0 }; 
+Calibration activePowerCalc = { 0, 0.000000005306441618, -0.00002260346534, 0.4755718712, 4.85 };  
+
+HLW8012 hlw8012;
 
 // =====================================================
-// KONFIGURASI MQTT BARU (Disesuaikan dari alpat-broker)
+// WSS MQTT CREDENTIALS
 // =====================================================
 const char* MQTT_HOST = "mqtt.sidontol.my.id";
 const uint16_t MQTT_PORT = 443;
 const char* MQTT_PATH = "/mqtt";
 const char* MQTT_USERNAME = "monitor";
 const char* MQTT_PASSWORD = "juni2024";
-const char* DEVICE_ID = "powermeter01"; // ID unik untuk client ini
+const char* DEVICE_ID = "powermeter01"; 
 
 const char* TOPIC_relay = "powermeter01/relay";
 const char* TOPIC_json = "esp/hlw8012/meter1";
-int intervalPengiriman = 60;  // satuan detik
+int intervalPengiriman = 5;  
 
-// Callibration struct
-struct Calibration {
-  double a;
-  double b;
-  double c;
-  double d;
-  double e;
-};
-
-// Callibration Variables
-Calibration currentCalc = { 0.000520401296, -0.008096351376, 0.0384854598, 0.3661410109, 0.0435};  //Poly 4th
-Calibration voltageCalc = { -0.18958, 80.35625, -8281.21667, 0, 0 }; // poly 2nd
-Calibration activePowerCalc = { 0, 0.000000005306441618, -0.00002260346534, 0.4755718712, 4.85 };  //poly 4th
-
-// BARU: Inisialisasi Objek WebSocket dan MQTT dari alpat-broker
 WebSocketsClient client;
 MQTTPubSubClient mqtt;
-HLW8012 hlw8012;
 
-//Wifi Setup func
-void setup_wifi() {
-  delay(10);
-  Serial.println();
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
-
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("");
-  Serial.println("WiFi Terhubung");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
-}
-
-// BARU: Event Handler untuk WebSocket
+// =====================================================
+// MQTT CALLBACK & CONNECTION
+// =====================================================
 void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
   switch(type) {
-    case WStype_DISCONNECTED:
-      Serial.println("[WSS] Disconnected");
-      break;
-    case WStype_CONNECTED:
-      Serial.println("[WSS] Connected");
-      break;
-    case WStype_ERROR:
-      Serial.println("[WSS] Error");
-      break;
-    default:
-      break;
+    case WStype_DISCONNECTED: Serial.println("[WSS] Disconnected"); break;
+    case WStype_CONNECTED:    Serial.println("[WSS] Connected"); break;
+    case WStype_ERROR:        Serial.println("[WSS] Error"); break;
+    default: break;
   }
 }
 
-// BARU: Callback MQTT saat ada pesan masuk (Disesuaikan parameternya)
 void mqttCallback(const char* payload, unsigned int length) {
   Serial.print("Pesan Masuk: ");
   for (int i = 0; i < length; i++) {
@@ -125,13 +91,10 @@ void mqttCallback(const char* payload, unsigned int length) {
   }
 }
 
-// BARU: Fungsi Reconnect MQTT menggunakan library baru
 bool connectMQTT() {
   if (WiFi.status() != WL_CONNECTED) return false;
 
-  Serial.println("[MQTT] Connecting...");
-
-  // Menggunakan Username & Password sesuai broker baru
+  Serial.println("[MQTT] Connecting to Alpat-Broker...");
   bool connected = mqtt.connect(DEVICE_ID, MQTT_USERNAME, MQTT_PASSWORD);
 
   if (!connected) {
@@ -139,24 +102,18 @@ bool connectMQTT() {
     return false;
   }
 
-  Serial.println("[MQTT] CONNECTED");
-  
-  // Subscribe menggunakan callback library MQTTPubSubClient
+  Serial.println("[MQTT] CONNECTED successfully");
   mqtt.subscribe(TOPIC_relay, mqttCallback);
-  Serial.println("Subscribe ke topic: " + String(TOPIC_relay));
-
   return true;
 }
 
 void publish_json() {
   JsonDocument doc;
 
-  // Format raw values
   sprintf(bufferActivePower, "%.3f", activePower);
   sprintf(bufferVoltage, "%.1f", voltage);
   sprintf(bufferCurrent, "%.3f", current);
 
-  // Format calibrated values
   sprintf(bufferActivePowerCalibrated, "%.3f", activePowerCalibrated);
   sprintf(bufferVoltageCalibrated, "%.1f", voltageCalibrated);
   sprintf(bufferCurrentCalibrated, "%.3f", currentCalibrated);
@@ -169,26 +126,49 @@ void publish_json() {
   doc["cal_p"] = bufferActivePowerCalibrated;
 
   serializeJson(doc, bufferJSON);
-  
-  // Menggunakan fungsi publish milik library baru
   mqtt.publish(TOPIC_json, bufferJSON);
+  Serial.println("[MQTT PUB] Telemetry Data Sent");
 }
 
+// =====================================================
+// SETUP & LOOP
+// =====================================================
 void setup() {
   Serial.begin(115200);
-  setup_wifi();
-
-  //GPIO Setup
+  
+  // Hardware GPIO Init
   pinMode(RELAY_PIN, OUTPUT);
   pinMode(LED_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, HIGH);  // Relay default OFF
-  digitalWrite(LED_PIN, LOW);     // LED default OFF
+  digitalWrite(RELAY_PIN, HIGH);  
+  digitalWrite(LED_PIN, LOW);     
 
-  //HLW8012 Setup
+  // HLW8012 Sensor Init
   hlw8012.begin(CF_PIN, CF1_PIN, SEL_PIN, CURRENT_MODE, false, 500000);
   hlw8012.setResistors(CURRENT_RESISTOR, VOLTAGE_RESISTOR_UPSTREAM, VOLTAGE_RESISTOR_DOWNSTREAM);
 
-  // BARU: Setup WebSocket SSL & MQTT Client
+  // WiFiManager Setup
+  WiFiManager wm;
+  
+  // Opsional: Buka tanda komentar di bawah jika ingin mereset kredensial WiFi saat pengujian
+  wm.resetSettings();
+
+  Serial.println("[SYSTEM] Connecting WiFi via WiFiManager...");
+  
+  // Memulai portal Captive AP bernama "AutoConnectAP" dengan password "password" jika WiFi gagal tersambung
+  bool res = wm.autoConnect("AutoConnectAP", "password");
+
+  if(!res) {
+    Serial.println("[WIFI] Failed to connect, restarting ESP...");
+    delay(3000);
+    ESP.restart();
+  } 
+  else {
+    Serial.println("[WIFI] Connected Successfully to internet!");
+    Serial.print("[WIFI] IP Address: ");
+    Serial.println(WiFi.localIP());
+  }
+
+  // WSS Network Services Initialization
   client.onEvent(webSocketEvent);
   client.beginSSL(MQTT_HOST, MQTT_PORT, MQTT_PATH, NULL, "mqtt");
   client.setReconnectInterval(3000);
@@ -198,11 +178,11 @@ void setup() {
 }
 
 void loop() {
-  // BARU: Menjalankan engine library WebSocket dan MQTT
+  // Selalu jalankan engine background untuk WSS WebSocket dan MQTT
   client.loop();
   mqtt.update();
 
-  // Auto-reconnect berkala jika koneksi terputus
+  // Rutinitas Auto-Reconnect MQTT Client jika terputus
   static unsigned long lastReconnectAttempt = 0;
   if (!mqtt.isConnected()) {
     if (millis() - lastReconnectAttempt >= 5000) {
@@ -211,7 +191,7 @@ void loop() {
     }
   }
 
-  // Pengiriman Telemetri JSON berkala
+  // Polling data HLW8012 dan Pengiriman data JSON ke Broker
   if (millis() - prevMillis >= intervalPengiriman * 1000) {
     activePower = hlw8012.getActivePower();
     voltage = hlw8012.getVoltage();
