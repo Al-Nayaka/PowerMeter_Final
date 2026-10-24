@@ -38,7 +38,7 @@ const char* ssid = "V";
 const char* password = "528491Vian";
 
 //MQTT Config
-const char* mqtt_server = "10.166.170.236";
+const char* mqtt_server = "192.168.0.100";
 // const char* TOPIC_activePower = "powermeter/activePower";
 // const char* TOPIC_voltage = "powermeter/voltage";
 // const char* TOPIC_current = "powermeter/current";
@@ -46,7 +46,7 @@ const char* mqtt_server = "10.166.170.236";
 // const char* TOPIC_powerFactor = "powermeter/powerFactor";
 const char* TOPIC_relay = "powermeter02/relay";
 const char* TOPIC_json = "esp/hlw8012/meter2";
-int intervalPengiriman = 60;  // satuan detik
+int intervalPengiriman = 5;  // satuan detik
 
 // Callibration struct
 struct Calibration {

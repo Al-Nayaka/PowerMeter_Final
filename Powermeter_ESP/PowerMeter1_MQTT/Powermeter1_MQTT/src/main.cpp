@@ -24,13 +24,9 @@
 
 // HLW8012 Variables
 float activePower, voltage, current;
-float activePowerCalibrated, voltageCalibrated, currentCalibrated;
 char bufferActivePower[12];
 char bufferVoltage[12];
 char bufferCurrent[12];
-char bufferActivePowerCalibrated[12];
-char bufferVoltageCalibrated[12];
-char bufferCurrentCalibrated[12];
 char bufferJSON[256];
 unsigned long prevMillis;
 
@@ -114,17 +110,9 @@ void publish_json() {
   sprintf(bufferVoltage, "%.1f", voltage);
   sprintf(bufferCurrent, "%.3f", current);
 
-  sprintf(bufferActivePowerCalibrated, "%.3f", activePowerCalibrated);
-  sprintf(bufferVoltageCalibrated, "%.1f", voltageCalibrated);
-  sprintf(bufferCurrentCalibrated, "%.3f", currentCalibrated);
-
-  doc["raw_v"] = bufferVoltage;
-  doc["cal_v"] = bufferVoltageCalibrated;
-  doc["raw_c"] = bufferCurrent;
-  doc["cal_c"] = bufferCurrentCalibrated;
-  doc["raw_p"] = bufferActivePower;
-  doc["cal_p"] = bufferActivePowerCalibrated;
-
+  doc["Nilai Tegangan"] = bufferVoltage;
+  doc["Nilai Arus"] = bufferCurrent;
+  doc["Nilai Daya Aktif"] = bufferActivePower;
   serializeJson(doc, bufferJSON);
   mqtt.publish(TOPIC_json, bufferJSON);
   Serial.println("[MQTT PUB] Telemetry Data Sent");
@@ -150,12 +138,13 @@ void setup() {
   WiFiManager wm;
   
   // Opsional: Buka tanda komentar di bawah jika ingin mereset kredensial WiFi saat pengujian
+  
   wm.resetSettings();
 
   Serial.println("[SYSTEM] Connecting WiFi via WiFiManager...");
   
   // Memulai portal Captive AP bernama "AutoConnectAP" dengan password "password" jika WiFi gagal tersambung
-  bool res = wm.autoConnect("AutoConnectAP", "password");
+  bool res = wm.autoConnect("PowerMeter", "");
 
   if(!res) {
     Serial.println("[WIFI] Failed to connect, restarting ESP...");
@@ -193,13 +182,9 @@ void loop() {
 
   // Polling data HLW8012 dan Pengiriman data JSON ke Broker
   if (millis() - prevMillis >= intervalPengiriman * 1000) {
-    activePower = hlw8012.getActivePower();
-    voltage = hlw8012.getVoltage();
-    current = hlw8012.getCurrent();
-
-    activePowerCalibrated = activePowerCalc.a * pow(hlw8012.getActivePower(), 4) + activePowerCalc.b * pow(hlw8012.getActivePower(), 3) + activePowerCalc.c * pow(hlw8012.getActivePower(), 2) + activePowerCalc.d * hlw8012.getActivePower() + activePowerCalc.e;
-    voltageCalibrated = voltageCalc.a * pow(hlw8012.getVoltage(), 2) + voltageCalc.b * hlw8012.getVoltage() + voltageCalc.c;
-    currentCalibrated = currentCalc.a * pow(hlw8012.getCurrent(), 4) + currentCalc.b * pow(hlw8012.getCurrent(), 3) + currentCalc.c * pow(hlw8012.getCurrent(), 2) + currentCalc.d * hlw8012.getCurrent() + currentCalc.e;
+    activePower = activePowerCalc.a * pow(hlw8012.getActivePower(), 4) + activePowerCalc.b * pow(hlw8012.getActivePower(), 3) + activePowerCalc.c * pow(hlw8012.getActivePower(), 2) + activePowerCalc.d * hlw8012.getActivePower() + activePowerCalc.e;
+    voltage = voltageCalc.a * pow(hlw8012.getVoltage(), 2) + voltageCalc.b * hlw8012.getVoltage() + voltageCalc.c;hlw8012.getVoltage();
+    current = currentCalc.a * pow(hlw8012.getCurrent(), 4) + currentCalc.b * pow(hlw8012.getCurrent(), 3) + currentCalc.c * pow(hlw8012.getCurrent(), 2) + currentCalc.d * hlw8012.getCurrent() + currentCalc.e;
 
     hlw8012.toggleMode();
 
