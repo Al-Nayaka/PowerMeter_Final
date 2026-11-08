@@ -1,10 +1,11 @@
 import "dotenv/config";
+import http from "http";
+import app from "./app.js";
 
-const express = require('express')
-const app = express()
+const PORT = process.env.PORT || 3000;
 
-app.get("/api", (req, res) => {
-    res.json({ "users": ["userOne", "userTwo", "userThree", "userFour", "userFive"] })
-})
+const server = http.createServer(app);
 
-app.listen(process.env.PORT || 5000, () => { console.log(`Server is running on port ${process.env.PORT || 5000}`) })
+server.listen(PORT, "0.0.0.0", () => {
+    console.log(`PowerMeter Backend running on port ${PORT}`);
+});
