@@ -37,8 +37,8 @@ unsigned long prevMillis;
 
 //MQTT Config
 const char* mqtt_server = "192.168.0.100";
-const char* TOPIC_relay = "esp/hlw8012/relay" + String(PWM_ID);
-const char* TOPIC_json = "esp/hlw8012/Powermeter_" + String(PWM_ID);
+String TOPIC_relay = "esp/hlw8012/relay" + String(PWM_ID);
+String TOPIC_json = "esp/hlw8012/Powermeter_" + String(PWM_ID);
 int intervalPengiriman = 5;  // satuan detik
 
 // Calibration struct
@@ -152,8 +152,8 @@ void reconnect() {
 
   if (mqtt.connect(clientId.c_str())) {
     Serial.println("connected!");
-    mqtt.subscribe(TOPIC_relay);
-    Serial.println("Subscribe ke topic: " + String(TOPIC_relay));
+    mqtt.subscribe(TOPIC_relay.c_str());
+    Serial.println("Subscribe ke topic: " + TOPIC_relay);
   } else {
     Serial.print("Failed, rc=");
     Serial.println(mqtt.state());
@@ -183,7 +183,7 @@ void publish_json() {
   doc["cal_p"] = bufferActivePowerCalibrated;
 
   serializeJson(doc, bufferJSON);
-  mqtt.publish(TOPIC_json, bufferJSON);
+  mqtt.publish(TOPIC_json.c_str(), bufferJSON);
 }
 
 void setup() {
