@@ -2,8 +2,6 @@
 // Copy to config.local.h (ignored by Git); never commit real credentials.
 #define DEVICE_CODE "PM-ESP32-001"
 #define CALIBRATION_PROFILE 1 // 1 or 3; independent from DEVICE_CODE
-#define WIFI_SSID ""
-#define WIFI_PASSWORD ""
 #define MQTT_HOST "192.168.0.100" // Numeric LAN IP avoids blocking DNS reconnect.
 #define MQTT_PORT 1883
 #define MQTT_USERNAME ""
