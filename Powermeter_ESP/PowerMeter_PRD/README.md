@@ -5,14 +5,23 @@ Firmware baru, terpisah dari PowerMeter1_MQTT dan PowerMeter3_MQTT. Tidak ada up
 ## Persiapan dan flash oleh operator
 
 1. Pasang Python dan PlatformIO Core (`python -m pip install platformio`). Buka terminal di folder ini.
-2. Salin `include/config.example.h` menjadi `include/config.local.h`. File lokal diabaikan Git. Isi SSID/password Wi-Fi, **IP numerik** broker LAN, port, username/password MQTT, dan server NTP yang dapat dijangkau (utamakan NTP lokal). Tidak ada kredensial nyata pada contoh. Tanpa konfigurasi lengkap, jaringan tidak dimulai dan relay tetap pada level OFF yang dikonfigurasi.
+2. Salin `include/config.example.h` menjadi `include/config.local.h`. File lokal diabaikan Git. Isi **IP numerik** broker LAN, port, username/password MQTT, dan server NTP yang dapat dijangkau (utamakan NTP lokal). SSID/password Wi-Fi diatur lewat WiFiManager, bukan kode. Definisi `WIFI_SSID`/`WIFI_PASSWORD` di konfigurasi lokal lama diabaikan. Tanpa konfigurasi MQTT lengkap, MQTT tidak dimulai tetapi portal Wi-Fi dan sampling tetap berjalan.
 3. Pilih `DEVICE_CODE` unik dan daftarkan/enabled di backend dengan prefix `powermeter/{device_code}`. Kode/command ID hanya huruf ASCII, angka, `-`, `_`; panjang kode maksimal 48, command ID 64.
 4. Pilih `CALIBRATION_PROFILE` **1** untuk koefisien meter 1 atau **3** untuk meter 3. Profil terpisah dari identitas perangkat, tidak dipilih otomatis berdasarkan angka kode.
 5. **Wajib verifikasi polaritas relay secara fisik tanpa beban dan tanpa tegangan PLN sebelum flash untuk operasi.** Default `RELAY_GPIO=25`, `RELAY_ON_LEVEL=0` hanyalah asumsi aktif-LOW karena komentar firmware lama menyebut HIGH=OFF, sedangkan callback lama menyebut HIGH=ON. Tentukan level ON sebenarnya dengan pengujian terisolasi. `RELAY_POLARITY_VERIFIED=0` menolak semua command. Ubah ke 1 hanya setelah verifikasi; jangan sekadar mengikuti log firmware lama.
 6. Build: `python -m platformio run`. Periksa board: default `esp32dev` (ESP32 klasik 4 MB), sesuaikan jika perangkat aktual berbeda.
 7. **Hanya setelah operator siap**, upload sendiri: `python -m platformio run -t upload --upload-port COMx`. Monitor: `python -m platformio device monitor --port COMx --baud 115200`.
 
-Tidak ada `WiFiManager.resetSettings()`, penghapusan NVS, atau reset Wi-Fi setiap boot. Wi-Fi memakai konfigurasi lokal dan auto-reconnect; perubahan kredensial dilakukan lewat build/provisioning operator, bukan captive portal. Kredensial tertanam dalam binary: jangan bagikan binary produksi.
+Tidak ada penghapusan NVS atau reset Wi-Fi setiap boot. Kredensial MQTT tetap tertanam dalam binary: jangan bagikan binary produksi.
+
+### Provisioning Wi-Fi dan Serial Monitor
+
+1. Saat boot, ESP32 mencoba kredensial Wi-Fi tersimpan hingga 15 detik. Jika belum ada atau gagal, WiFiManager membuka AP **`PowerMeter-xxxxxxxx`** (suffix identitas chip), password **`powermeter`**. Nama AP juga dicetak di Serial Monitor.
+2. Hubungkan HP/laptop ke AP tersebut, buka **http://192.168.4.1**, pilih Configure WiFi, isi SSID/password jaringan tujuan lalu simpan. Kredensial disimpan oleh ESP32 untuk boot berikutnya, tanpa menghapus counter energi.
+3. Portal berjalan non-blocking melalui `wifiManager.process()`. Sampling tetap berjalan setelah inisialisasi, walaupun belum terhubung. Percobaan koneksi awal dan saat menyimpan kredensial masih dapat menunggu hingga 15 detik; energi pada gap >5 detik tidak diestimasi. Portal tidak memiliki timeout. Setelah berhasil terhubung, portal ditutup; jika jaringan kemudian putus, ESP32 mencoba reconnect. Untuk mengganti jaringan, matikan jaringan lama lalu reboot ESP32 agar portal muncul kembali.
+4. Serial Monitor tetap **115200 baud**. Log mencakup boot/profil, NVS, WiFiManager, perubahan koneksi/IP/RSSI, sinkronisasi NTP, percobaan MQTT/subscribe, kegagalan publish, command relay dan pembacaan V/A/W/Wh **tiap detik**, termasuk saat offline. `nan` menunjukkan pembacaan invalid; `telemetry_valid` bukan bukti MQTT terkirim/backend menyimpan data.
+
+Password AP di atas adalah default bersama, bukan rahasia per perangkat. Lakukan provisioning di lingkungan terkontrol dan ubah argumen password `autoConnect` di `src/main.cpp` sebelum penggunaan di lingkungan bersama. Jangan membagikan log provisioning tanpa memeriksa data jaringan di dalamnya.
 
 ## GPIO dan batas keselamatan
 
@@ -80,15 +89,16 @@ Jam harus sudah sinkron. `issued_at` wajib UTC `YYYY-MM-DDTHH:mm:ssZ` atau `YYYY
 
 ## Reconnect, memori dan keamanan
 
-Wi-Fi retry 15 detik tanpa loop tunggu koneksi. MQTT retry 5 detik di task FreeRTOS terpisah; connect TCP dibatasi 1 detik, timeout respons MQTT 1 detik. Call PubSubClient tetap sinkron **di task MQTT**, tidak memblokir loop sampling. Hanya task tersebut mengakses client dan cache. Satu slot antrean snapshot mengganti sampel lama; sampel >3 detik dibuang saat reconnect, tidak ada backlog tak terbatas. Tidak ada replay histori offline. Pengiriman telemetry gagal berarti sampel hilang.
+Wi-Fi retry 15 detik saat portal tidak aktif, ditambah auto-reconnect ESP32. Saat portal aktif, koneksi dikelola WiFiManager agar tidak bertabrakan dengan retry manual. MQTT retry 5 detik di task FreeRTOS terpisah; connect TCP dibatasi 1 detik, timeout respons MQTT 1 detik. Call PubSubClient tetap sinkron **di task MQTT**, tidak memblokir loop sampling. Hanya task tersebut mengakses client dan cache. Satu slot antrean snapshot mengganti sampel lama; sampel >3 detik dibuang saat reconnect, tidak ada backlog tak terbatas. Tidak ada replay histori offline. Pengiriman telemetry gagal berarti sampel hilang.
 
-MQTT memakai username/password dan WiFiClient plaintext, LAN-only. Aktifkan ACL per perangkat: write measurement/heartbeat/availability/relay/state sendiri, read relay/command sendiri; backend memakai akun berbeda. Jangan membuka port broker ke internet. Untuk jaringan tidak terpercaya gunakan client TLS/sertifikat dan provisioning aman; implementasi ini tidak menyediakan TLS, OTA, captive portal, feedback kontak, maupun command persistence.
+MQTT memakai username/password dan WiFiClient plaintext, LAN-only. Aktifkan ACL per perangkat: write measurement/heartbeat/availability/relay/state sendiri, read relay/command sendiri; backend memakai akun berbeda. Jangan membuka port broker ke internet. Untuk jaringan tidak terpercaya gunakan client TLS/sertifikat dan provisioning aman; implementasi ini tidak menyediakan TLS, OTA, feedback kontak, maupun command persistence. Captive portal WiFiManager hanya mengatur Wi-Fi, bukan kredensial broker.
 
 ## Pengujian
 
 ```powershell
 python -m platformio pkg install
 python test/run_native.py
+python test/test_wifi_setup.py
 python -m platformio run
 ```
 
@@ -97,6 +107,8 @@ Host test memakai `g++` C++14 dan header ArduinoJson asli yang dipasang Platform
 Build diverifikasi untuk profil 1 dan profil 3, termasuk build konfigurasi nonkosong menggunakan nilai dummy tanpa kredensial nyata. Tidak ada flash atau uji hardware/broker aktual dilakukan. Checklist operator sebelum operasi:
 
 - [ ] Verifikasi board, tegangan logika, isolasi, pull-up CF dan level OFF/ON relay tanpa PLN/beban.
+- [ ] Tanpa Wi-Fi tersimpan/jaringan lama mati saat boot: AP muncul, portal bisa menyimpan jaringan baru, reboot tersambung otomatis; counter energi tidak terhapus.
+- [ ] Serial 115200: log meter tetap muncul saat portal/offline, koneksi MQTT gagal terlihat; cek pembacaan terhadap alat referensi.
 - [ ] Uji boot/reset/offline tetap sesuai kebijakan relay; kontak aktual diukur terpisah dari GPIO.
 - [ ] Bandingkan V/A/W dengan alat referensi untuk kedua profil, termasuk no-load dan beban rendah.
 - [ ] Blok NTP: tidak ada measurement/command; buka NTP: timestamp UTC dan measurement valid.

@@ -1,5 +1,6 @@
 import { useId } from 'react'
 import type { ChartConfig, ChartPill } from '../data'
+import { sampleTime } from '../live-api'
 
 function Pill({ pill, color }: { pill: ChartPill; color: string }) {
   return (
@@ -14,16 +15,20 @@ function Pill({ pill, color }: { pill: ChartPill; color: string }) {
   )
 }
 
-export function ChartCard({ config }: { config: ChartConfig }) {
+export function ChartCard({ config }: { config: ChartConfig & { times?: number[] } }) {
   const rawId = useId()
   const gradientId = `area-${rawId.replace(/[^a-zA-Z0-9]/g, '')}`
-  const range = config.max - config.min
+  const range = config.max - config.min || 1
+  const start = config.times?.[0]
+  const end = config.times?.at(-1)
   const points = config.data.map((value, index) => {
-    const x = (index / (config.data.length - 1)) * 100
+    const x = config.data.length === 1 ? 50 : start !== undefined && end !== undefined && end > start
+      ? ((config.times![index] - start) / (end - start)) * 100
+      : (index / (config.data.length - 1)) * 100
     const y = 100 - ((value - config.min) / range) * 100
     return `${x.toFixed(3)},${y.toFixed(3)}`
   })
-  const linePath = `M${points.join(' L')}`
+  const linePath = points.length ? `M${points.join(' L')}` : ''
   const areaPath = `${linePath} L100,100 L0,100 Z`
 
   return (
@@ -47,7 +52,7 @@ export function ChartCard({ config }: { config: ChartConfig }) {
         <div className="chart-y">
           {config.ticks.map((tick, index) => (
             <span
-              key={tick}
+              key={index}
               style={{ top: `${(index / (config.ticks.length - 1)) * 100}%` }}
             >
               {tick}
@@ -57,15 +62,15 @@ export function ChartCard({ config }: { config: ChartConfig }) {
 
         <div className="chart-main">
           <div className="chart-plot">
-            {config.ticks.map((tick, index) => (
+            {config.ticks.map((_, index) => (
               <span
-                key={tick}
+                key={index}
                 className="grid-line"
                 style={{ top: `${(index / (config.ticks.length - 1)) * 100}%` }}
               />
             ))}
 
-            <svg
+            {points.length === 0 ? <p role="status">Belum ada sampel pengukuran.</p> : <svg
               className="chart-svg"
               viewBox="0 0 100 100"
               preserveAspectRatio="none"
@@ -78,7 +83,8 @@ export function ChartCard({ config }: { config: ChartConfig }) {
                   <stop offset="100%" stopColor={config.color} stopOpacity="0.02" />
                 </linearGradient>
               </defs>
-              <path d={areaPath} fill={`url(#${gradientId})`} />
+              {points.length > 1 && <path d={areaPath} fill={`url(#${gradientId})`} />}
+              {points.length === 1 && <circle cx="50" cy={points[0].split(',')[1]} r="1" fill={config.color} />}
               <path
                 d={linePath}
                 fill="none"
@@ -88,12 +94,12 @@ export function ChartCard({ config }: { config: ChartConfig }) {
                 strokeLinejoin="round"
                 strokeLinecap="round"
               />
-            </svg>
+            </svg>}
           </div>
 
           <div className="chart-x">
-            <span>2 menit lalu</span>
-            <span>sekarang</span>
+            <span>{start !== undefined ? sampleTime(start) : '—'}</span>
+            <span>{end !== undefined ? sampleTime(end) : '—'}</span>
           </div>
         </div>
       </div>

@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { Activity, ChartColumn, ChevronDown, FileText, Settings } from 'lucide-react'
 import { Logo } from './Logo'
-import { meters } from '../data'
+import type { Device } from '../devices'
 import type { DashboardPage } from '../types'
 
 interface SidebarProps {
   page: DashboardPage
   meterId: string
+  meters: Device[]
   onNavigate: (page: DashboardPage) => void
   onSelectMeter: (id: string) => void
 }
@@ -14,6 +15,7 @@ interface SidebarProps {
 export function Sidebar({
   page,
   meterId,
+  meters,
   onNavigate,
   onSelectMeter,
 }: SidebarProps) {
@@ -70,7 +72,7 @@ export function Sidebar({
             aria-current={page === 'live' ? 'page' : undefined}
             onClick={() => onNavigate('live')}
           >
-            {selectedMeter.name}
+            {selectedMeter?.name ?? 'Belum ada perangkat'}
           </button>
         )}
 
@@ -101,6 +103,7 @@ export function Sidebar({
       </nav>
 
       <div className="meter-list">
+        {meters.length === 0 && <p className="app-notice">Belum ada perangkat terdaftar.</p>}
         {meters.map((meter) => (
           <button
             key={meter.id}
@@ -108,7 +111,7 @@ export function Sidebar({
             className={`meter-card${meterId === meter.id ? ' is-selected' : ''}`}
             onClick={() => handleMeterClick(meter.id)}
             aria-pressed={meterId === meter.id}
-            aria-label={`${meter.name} — ${meter.online ? 'Online' : 'Offline'}`}
+            aria-label={`${meter.name}, ${meter.online ? 'Online' : 'Offline'}`}
             title={meter.name}
           >
             <span className="meter-name">{meter.name}</span>

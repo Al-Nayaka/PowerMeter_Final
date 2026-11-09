@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react'
 import { Moon, Sun } from 'lucide-react'
 import type { Theme } from '../types'
 
-export function TopBar({ theme, onThemeChange }: {
+export function TopBar({ theme, onThemeChange, connected }: {
   theme: Theme
   onThemeChange: (theme: Theme) => void
+  connected: boolean
 }) {
   const [now, setNow] = useState(() => new Date())
 
@@ -30,8 +31,8 @@ export function TopBar({ theme, onThemeChange }: {
   return (
     <header className="topbar">
       <div className="connection">
-        <span className="dot offline" />
-        <span>Mode contoh, {time}</span>
+        <span className={`dot ${connected ? 'online' : 'offline'}`} />
+        <span role="status">{connected ? 'Backend & MQTT terhubung' : 'Backend belum siap'}, {time}</span>
       </div>
 
       <div className="topbar-right">

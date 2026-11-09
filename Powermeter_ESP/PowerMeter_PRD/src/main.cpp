@@ -4,6 +4,7 @@
 #include <Preferences.h>
 #include <PubSubClient.h>
 #include <WiFi.h>
+#include <WiFiManager.h>
 #include <esp_sntp.h>
 #include <esp_system.h>
 #include <atomic>
@@ -15,6 +16,7 @@ namespace {
 constexpr uint8_t CF_PIN = 34, CF1_PIN = 13, SEL_PIN = 26, LED_PIN = 32;
 constexpr uint32_t SAMPLE_MS = 1000, HEARTBEAT_MS = 15000;
 HLW8012 meter;
+WiFiManager wifiManager;
 Preferences nvs;
 bool nvsReady = false;
 double energyWh = 0, savedEnergy = 0;
@@ -79,7 +81,10 @@ void acknowledge(const pm::CommandRecord& command) {
   if (!publish(stateTopic, doc)) Serial.println("ACK publish failed; retry command with same ID");
 }
 
-void reject() { rejectedCommands.fetch_add(1); }
+void reject() {
+  rejectedCommands.fetch_add(1);
+  Serial.println("[RELAY] Command rejected: check clock, polarity gate and command format/freshness");
+}
 
 void onCommand(char* topic, byte* payload, unsigned int length) {
   if (strcmp(topic, commandTopic) != 0 || !clockReady() || !RELAY_POLARITY_VERIFIED) {
@@ -103,6 +108,7 @@ void onCommand(char* topic, byte* payload, unsigned int length) {
   digitalWrite(RELAY_GPIO, state ? RELAY_ON_LEVEL : !RELAY_ON_LEVEL);
   digitalWrite(LED_PIN, state ? HIGH : LOW);
   relayState = state;
+  Serial.printf("[RELAY] Command %s: %s (GPIO only, no contact feedback)\n", id, state ? "ON" : "OFF");
   acknowledge(commands.remember(id, state, confirmed));
 }
 
@@ -146,7 +152,7 @@ void publishMeasurement(const Sample& s) {
   doc["energy_wh"] = s.energy;
   doc["power_factor"] = nullptr; // Alternating CF1 readings are not simultaneous.
   doc["recorded_at"] = stamp;
-  publish(measurementTopic, doc);
+  if (!publish(measurementTopic, doc)) Serial.println("[MQTT] Measurement publish failed");
 }
 
 void mqttWorker(void*) {
@@ -163,15 +169,18 @@ void mqttWorker(void*) {
     if (WiFi.status() == WL_CONNECTED && !mqtt.connected() &&
         uint32_t(millis() - lastAttempt) >= 5000) {
       lastAttempt = millis();
+      Serial.printf("[MQTT] Connecting to %s:%u\n", MQTT_HOST, MQTT_PORT);
       if (mqtt.connect(clientId, MQTT_USERNAME, MQTT_PASSWORD, availabilityTopic, 1, true, will, true)) {
         if (!mqtt.subscribe(commandTopic, 1)) {
+          Serial.println("[MQTT] Subscribe failed");
           transport.stop(); // Ungraceful close lets the broker emit the offline LWT.
         } else {
+          Serial.printf("[MQTT] Connected; subscribed to %s\n", commandTopic);
           publishAvailability();
           publishHeartbeat();
           lastHeartbeat = millis();
         }
-      }
+      } else Serial.printf("[MQTT] Connect failed, state=%d; retry in 5s\n", mqtt.state());
     }
     if (mqtt.connected()) {
       mqtt.loop();
@@ -196,7 +205,25 @@ bool configureTopics() {
   snprintf(commandTopic, sizeof(commandTopic), "powermeter/%s/relay/command", DEVICE_CODE);
   snprintf(stateTopic, sizeof(stateTopic), "powermeter/%s/relay/state", DEVICE_CODE);
   IPAddress ip;
-  return ip.fromString(MQTT_HOST) && *WIFI_SSID && *MQTT_USERNAME && *MQTT_PASSWORD;
+  return ip.fromString(MQTT_HOST) && *MQTT_USERNAME && *MQTT_PASSWORD;
+}
+
+void setupWifi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  wifiManager.setDebugOutput(true);
+  wifiManager.setConfigPortalBlocking(false);
+  wifiManager.setConnectTimeout(15);
+  wifiManager.setSaveConnectTimeout(15);
+  wifiManager.setConfigPortalTimeout(0);
+  wifiManager.setAPCallback([](WiFiManager* manager) {
+    Serial.printf("[WiFi] Setup AP: %s; open http://192.168.4.1\n", manager->getConfigPortalSSID().c_str());
+  });
+  char apName[32];
+  snprintf(apName, sizeof(apName), "PowerMeter-%08lx", (unsigned long)(uint32_t)ESP.getEfuseMac());
+  Serial.println("[WiFi] Trying saved credentials; setup AP password: powermeter");
+  if (wifiManager.autoConnect(apName, "powermeter")) Serial.println("[WiFi] Saved connection restored");
+  else Serial.println("[WiFi] Not connected; provisioning portal runs in loop");
 }
 }
 
@@ -207,6 +234,8 @@ void setup() {
   digitalWrite(LED_PIN, LOW);
   pinMode(LED_PIN, OUTPUT);
   Serial.begin(115200);
+  Serial.printf("\n[BOOT] PowerMeter %s; profile=%d; relay OFF; command gate=%d\n",
+                DEVICE_CODE, CALIBRATION_PROFILE, RELAY_POLARITY_VERIFIED);
   meter.begin(CF_PIN, CF1_PIN, SEL_PIN, HIGH, true, 500000);
   meter.setResistors(0.001, 5 * 470000, 1000);
   attachInterrupt(digitalPinToInterrupt(CF_PIN), onCf, CHANGE);
@@ -219,6 +248,7 @@ void setup() {
   }
   savedEnergy = energyWh;
   storageHealthy.store(nvsReady);
+  Serial.printf("[NVS] Ready=%d; restored energy=%.3f Wh\n", nvsReady, energyWh);
   lastSave = millis();
   samples = xQueueCreate(1, sizeof(Sample));
   if (!samples) { Serial.println("Sample queue allocation failed"); return; }
@@ -226,13 +256,11 @@ void setup() {
   esp_fill_random(nonce, sizeof(nonce));
   snprintf(bootNonce, sizeof(bootNonce), "%08lx%08lx%08lx%08lx",
            (unsigned long)nonce[0], (unsigned long)nonce[1], (unsigned long)nonce[2], (unsigned long)nonce[3]);
+  setupWifi();
   if (!configureTopics()) {
-    Serial.println("Network disabled: configure local SSID, numeric broker IP and MQTT credentials");
+    Serial.println("[MQTT] Disabled: configure device code, numeric broker IP and MQTT credentials; WiFi portal remains available");
     return;
   }
-  WiFi.mode(WIFI_STA);
-  WiFi.setAutoReconnect(true);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   sntp_set_time_sync_notification_cb(onTimeSync);
   configTime(0, 0, NTP_SERVER);
   if (xTaskCreate(mqttWorker, "mqtt", 8192, nullptr, 1, nullptr) != pdPASS)
@@ -240,11 +268,26 @@ void setup() {
 }
 
 void loop() {
+  wifiManager.process();
   static uint32_t lastSample = millis(), lastWifi = millis();
+  static int lastWifiStatus = -1;
+  static bool lastClockReady = false;
   static double previousPower = NAN;
   const uint32_t now = millis();
-  if (*WIFI_SSID && WiFi.status() != WL_CONNECTED && uint32_t(now - lastWifi) >= 15000) {
+  const int wifiStatus = WiFi.status();
+  if (wifiStatus != lastWifiStatus) {
+    lastWifiStatus = wifiStatus;
+    Serial.printf("[WiFi] Status=%d; IP=%s; RSSI=%d dBm\n", wifiStatus,
+                  WiFi.localIP().toString().c_str(), WiFi.RSSI());
+  }
+  const bool synced = clockReady();
+  if (synced != lastClockReady) {
+    lastClockReady = synced;
+    Serial.printf("[NTP] Clock %s\n", synced ? "synchronized" : "not synchronized; telemetry/commands gated");
+  }
+  if (!wifiManager.getConfigPortalActive() && wifiStatus != WL_CONNECTED && uint32_t(now - lastWifi) >= 15000) {
     lastWifi = now;
+    Serial.println("[WiFi] Reconnecting using saved credentials");
     WiFi.reconnect();
   }
   if (uint32_t(now - lastSample) >= SAMPLE_MS) {
@@ -259,6 +302,10 @@ void loop() {
     sample.energy = energyWh;
     sample.captured = time(nullptr);
     sample.clockValid = clockReady() && nvsReady && std::isfinite(energyWh);
+    Serial.printf("[METER] V=%.1f V I=%.3f A P=%.3f W E=%.3f Wh | clock=%d storage=%d telemetry_valid=%d\n",
+                  sample.voltage, sample.current, sample.power, sample.energy,
+                  clockReady(), nvsReady, sample.clockValid && std::isfinite(sample.voltage) &&
+                  std::isfinite(sample.current) && std::isfinite(sample.power));
     if (samples) xQueueOverwrite(samples, &sample);
   }
   const uint32_t sinceSave = now - lastSave;
@@ -268,6 +315,7 @@ void loop() {
     if (nvs.putDouble("energy_wh", energyWh) == sizeof(double)) {
       savedEnergy = energyWh;
       storageHealthy.store(true);
+      Serial.printf("[NVS] Energy checkpoint saved: %.3f Wh\n", savedEnergy);
     } else {
       storageHealthy.store(false);
       Serial.println("Energy checkpoint failed; retry after batching interval");
