@@ -1,0 +1,27 @@
+user powermeter-backend
+topic read powermeter/+/measurement
+topic read powermeter/+/heartbeat
+topic read powermeter/+/availability
+topic read powermeter/+/relay/state
+topic write powermeter/+/relay/command
+
+user PM-ESP32-001
+topic write powermeter/PM-ESP32-001/measurement
+topic write powermeter/PM-ESP32-001/heartbeat
+topic write powermeter/PM-ESP32-001/availability
+topic write powermeter/PM-ESP32-001/relay/state
+topic read powermeter/PM-ESP32-001/relay/command
+
+user PM-ESP32-002
+topic write powermeter/PM-ESP32-002/measurement
+topic write powermeter/PM-ESP32-002/heartbeat
+topic write powermeter/PM-ESP32-002/availability
+topic write powermeter/PM-ESP32-002/relay/state
+topic read powermeter/PM-ESP32-002/relay/command
+
+user PM-ESP32-003
+topic write powermeter/PM-ESP32-003/measurement
+topic write powermeter/PM-ESP32-003/heartbeat
+topic write powermeter/PM-ESP32-003/availability
+topic write powermeter/PM-ESP32-003/relay/state
+topic read powermeter/PM-ESP32-003/relay/command

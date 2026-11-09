@@ -1,70 +1,71 @@
-# Getting Started with Create React App
+# KostWatt — Power Meter Dashboard
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Implementasi React dari desain Figma **KostWatt** dengan halaman monitoring, perbandingan, laporan, dan pengaturan.
 
-## Available Scripts
+## Stack
 
-In the project directory, you can run:
+- [Vite](https://vite.dev/) + React + TypeScript
+- IBM Plex Sans via `@fontsource/ibm-plex-sans`
+- Ikon dari `lucide-react`
+- Grafik area SVG custom (tanpa library chart tambahan)
 
-### `npm start`
+## Menjalankan
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+```bash
+npm install
+npm run dev
+```
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+Buka <http://localhost:5173>. Halaman perbandingan bisa dibuka langsung lewat <http://localhost:5173/#comparison>.
 
-### `npm test`
+- Laporan: <http://localhost:5173/#reports>
+- Pengaturan: <http://localhost:5173/#settings>
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+Perintah lain:
 
-### `npm run build`
+```bash
+npm run build    # type-check + build produksi ke dist/
+npm run preview  # preview hasil build
+npm run lint     # oxlint
+npm test         # 13 pengujian, memerlukan Node.js 22.18+ atau 24+
+```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## Struktur
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+```text
+src/
+  components/
+    Cards.tsx       # Relay, total pemakaian, power factor, daya reaktif
+    ChartCard.tsx   # Kartu metrik + grafik area SVG
+    Logo.tsx        # Logo bolt KostWatt
+    Sidebar.tsx     # Navigasi, daftar power meter, profil pengguna
+    TopBar.tsx      # Status koneksi (jam live) + tanggal
+    ComparisonChart.tsx  # Grafik area dua series (board A vs B)
+  pages/
+    LivePage.tsx       # Halaman live monitoring per power meter
+    ComparisonPage.tsx # Halaman perbandingan dua board
+    ReportsPage.tsx    # Filter, ringkasan, tabel dan ekspor CSV
+    SettingsPage.tsx   # Perangkat, batas listrik, notifikasi, preferensi
+  reports.ts        # Sampel laporan, validasi, agregasi dan CSV
+  settings.ts       # Validasi dan penyimpanan pengaturan lokal
+  navigation.ts     # Pemetaan hash halaman
+  data.ts           # Data contoh grafik, seri perbandingan & konfigurasi kartu
+  index.css         # Design token dan seluruh styling
+  App.tsx           # Komposisi halaman + navigasi
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## Catatan desain
 
-### `npm run eject`
+- Palet: `#0D171A` (background), `#082D33` (sidebar), `#142226` (kartu), aksen teal `#4FD8DC`, hijau `#3FCF9E`, kuning `#F2AC2E`.
+- Data grafik diambil dari desain Figma dan disimpan sebagai data contoh di `src/data.ts`.
+- Halaman **Power comparison**: pilih board A dan B, tukar board, filter rentang waktu (Live/1 jam/24 jam/7 hari), pilih grafik yang ditampilkan (Watt, Voltage, Arus, Power factor, Daya reaktif, Energi), tiga kartu ringkasan, dan grafik area dua series.
+- Interaksi: toggle relay, pilih power meter di sidebar, jam koneksi live, collapse menu Live monitoring, dan navigasi antar halaman.
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+## Laporan dan pengaturan
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- Laporan memakai data contoh Power Meter 1 pada 20–26 Oktober 2026. Filter baru diterapkan setelah **Tampilkan**; periode tidak valid mempertahankan hasil sebelumnya. Board lain dan resolusi per jam menampilkan keadaan kosong, bukan data buatan.
+- Ringkasan dan total dihitung dari baris yang ditampilkan. CSV dapat diunduh; XLSX/PDF dinonaktifkan dengan penjelasan.
+- Tambah/edit perangkat, batas listrik, notifikasi, preferensi, dan konfigurasi koneksi disimpan di `localStorage`. Validasi menolak ID/nama duplikat, batas tegangan terbalik, dan URL berkredensial.
+- Tema terang/gelap berlaku ke dashboard dan bertahan setelah reload. Preferensi selain tema saat ini hanya disimpan, belum diterapkan ke halaman lain.
+- Tidak ada backend, koneksi MQTT/API, provisioning perangkat, atau pengiriman notifikasi aktif. Indikator pada daftar meter merupakan bagian dari data contoh.
+- Verifikasi browser dan aksesibilitas dicatat di `docs/verification.md`.

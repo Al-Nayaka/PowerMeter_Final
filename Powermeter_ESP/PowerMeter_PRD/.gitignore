@@ -1,0 +1,4 @@
+.pio/
+include/config.local.h
+native_protocol.exe
+native_command.exe
