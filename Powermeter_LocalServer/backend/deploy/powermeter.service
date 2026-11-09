@@ -1,0 +1,26 @@
+[Unit]
+Description=PowerMeter LAN backend
+After=network-online.target postgresql.service mosquitto.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=powermeter
+Group=powermeter
+WorkingDirectory=/opt/powermeter/backend
+Environment=NODE_ENV=production
+EnvironmentFile=/etc/powermeter/backend.env
+ExecStart=/usr/bin/node /opt/powermeter/backend/src/server.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

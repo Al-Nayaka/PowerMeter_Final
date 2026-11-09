@@ -11,10 +11,8 @@ Implementasi React dari desain Figma **KostWatt** dengan halaman monitoring, per
 
 ## Menjalankan
 
-Memerlukan Node.js 22.18+ (disarankan Node.js 24). Jalankan dari `Powermeter_LocalServer/frontend/`.
-
 ```bash
-npm ci
+npm install
 npm run dev
 ```
 
@@ -22,10 +20,6 @@ Buka <http://localhost:5173>. Halaman perbandingan bisa dibuka langsung lewat <h
 
 - Laporan: <http://localhost:5173/#reports>
 - Pengaturan: <http://localhost:5173/#settings>
-
-`npm start` juga menjalankan Vite. Backend tetap dijalankan terpisah dari folder `../backend/`; Vite meneruskan `/api` ke `http://localhost:3000` sesuai port bawaan backend. Proxy ini hanya berlaku saat development dan tidak berarti dashboard sudah memakai data backend.
-
-Migrasi dari Create React App dan file lama dijelaskan di `docs/migration.md`.
 
 Perintah lain:
 
