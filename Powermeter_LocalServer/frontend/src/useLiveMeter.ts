@@ -133,9 +133,9 @@ export function useLiveMeter(deviceCode?: string) {
     }
   }, [deviceCode])
 
-  const sendRelay = useCallback(async (on: boolean, adminKey: string) => {
+  const sendRelay = useCallback(async (on: boolean, adminKey?: string) => {
     const session = sessionRef.current
-    if (!session || session.busy || !adminKey.trim()) return
+    if (!session || session.busy) return
     session.busy = true
     setSending(true)
     setCommand(null)

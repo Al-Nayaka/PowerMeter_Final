@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { energyKwh, formatValue, reactivePower, sampleTime } from '../live-api'
 import type { Measurement, RelayState } from '../live-api'
 
@@ -8,44 +7,37 @@ interface RelayProps {
   pending?: boolean
   error?: string | null
   commandStatus?: string
-  onCommand?: (on: boolean, adminKey: string) => Promise<void>
+  onCommand?: (on: boolean) => Promise<void>
 }
 export function RelayCard({ relay = null, enabled = false, pending = false, error, commandStatus, onCommand }: RelayProps) {
-  // Credentials live only in this mounted session, never browser storage.
-  const [adminKey, setAdminKey] = useState('')
-  const buttonStyle = { minHeight: 44, border: '1px solid var(--card-border)', borderRadius: 6, padding: '8px 12px', opacity: !enabled || pending || !adminKey.trim() ? 0.6 : 1 }
+  const buttonStyle = { minHeight: 44, border: '1px solid var(--card-border)', borderRadius: 6, padding: '8px 12px', opacity: !enabled || pending ? 0.6 : 1, cursor: !enabled || pending ? 'not-allowed' : 'pointer' }
   return (
     <section className="card relay-card" aria-busy={pending}>
       <div className="relay-head">
         <span className="card-label">Relay 1</span>
-        {relay !== null && <button
+        <button
           type="button"
-          className={`toggle${relay.state ? ' is-on' : ''}`}
+          className={`toggle${relay?.state ? ' is-on' : ''}`}
           role="switch"
-          aria-checked={relay.state}
-          aria-label={relay.state ? 'Matikan relay 1' : 'Nyalakan relay 1'}
-          disabled={!enabled || pending || !adminKey.trim() || !onCommand}
-          onClick={() => { void onCommand?.(!relay.state, adminKey) }}
-        ><span className="knob" /></button>}
+          aria-checked={relay?.state ?? false}
+          aria-label={relay?.state ? 'Matikan relay 1' : 'Nyalakan relay 1'}
+          disabled={!enabled || pending || !onCommand}
+          onClick={() => { void onCommand?.(!relay?.state) }}
+        ><span className="knob" /></button>
       </div>
       <div className="relay-row row">
         <span className="label">Status terakhir (ACK)</span>
         <strong>{relay === null ? 'Belum diketahui' : relay.state ? 'ON' : 'OFF'}</strong>
       </div>
       {relay?.changed_at && <p className="card-sub">Dikonfirmasi {sampleTime(Date.parse(relay.changed_at))}</p>}
-      <label className="card-sub" htmlFor="relay-admin-key">Kunci admin (sesi ini)</label>
-      <input id="relay-admin-key" type="password" value={adminKey} autoComplete="off"
-        disabled={pending} style={{ width: '100%', minHeight: 44, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--card-border)', borderRadius: 6, padding: '8px 12px' }}
-        onChange={(event) => setAdminKey(event.target.value)} aria-describedby="relay-help" />
-      <p id="relay-help" className="card-sub">Kunci tidak disimpan. Perubahan berlaku setelah konfirmasi perangkat.</p>
-      {relay === null && <div className="row">
-        <button type="button" style={buttonStyle} disabled={!enabled || pending || !adminKey.trim() || !onCommand}
-          onClick={() => { void onCommand?.(true, adminKey) }}>Nyalakan</button>
-        <button type="button" style={buttonStyle} disabled={!enabled || pending || !adminKey.trim() || !onCommand}
-          onClick={() => { void onCommand?.(false, adminKey) }}>Matikan</button>
-      </div>}
-      {!enabled && <p className="card-sub">Kontrol dinonaktifkan: tunggu koneksi live dan perangkat online.</p>}
-      <p className="card-sub" role="status">{pending ? 'Menunggu ACK perangkat…' : commandStatus === 'confirmed' ? 'Perintah dikonfirmasi perangkat.' : ''}</p>
+      <div className="row" style={{ gap: '8px', marginTop: '10px' }}>
+        <button type="button" style={{ ...buttonStyle, flex: 1 }} disabled={!enabled || pending || !onCommand}
+          onClick={() => { void onCommand?.(true) }}>Nyalakan</button>
+        <button type="button" style={{ ...buttonStyle, flex: 1 }} disabled={!enabled || pending || !onCommand}
+          onClick={() => { void onCommand?.(false) }}>Matikan</button>
+      </div>
+      {!enabled && <p className="card-sub">Kontrol dinonaktifkan: perangkat offline atau dinonaktifkan.</p>}
+      <p className="card-sub" role="status">{pending ? 'Mengirim perintah ke topic relay/command…' : commandStatus === 'confirmed' ? 'Perintah berhasil dikonfirmasi perangkat.' : ''}</p>
       {error && <p role="alert">{error}</p>}
     </section>
   )

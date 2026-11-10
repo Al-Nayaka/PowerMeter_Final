@@ -6,7 +6,7 @@ export function relayRoutes(service, admin) {
     const controller = relayController(service);
     router.param('deviceCode', (req, res, next, value) => { try { deviceCode(value); next(); } catch (e) { next(e); } });
     router.get('/:deviceCode', controller.states);
-    router.get('/:deviceCode/commands/:commandId', admin, controller.getCommand);
-    router.post('/:deviceCode/commands', admin, controller.command);
+    router.get('/:deviceCode/commands/:commandId', controller.getCommand);
+    router.post('/:deviceCode/commands', controller.command);
     return router;
 }

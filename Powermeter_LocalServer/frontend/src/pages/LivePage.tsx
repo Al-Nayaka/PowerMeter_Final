@@ -40,7 +40,7 @@ export function LivePage({ meterName, deviceCode }: { meterName: string; deviceC
 
         <aside className="side-cards" aria-label="Ringkasan daya">
           <RelayCard key={deviceCode ?? 'none'} relay={live.relay} pending={live.sending}
-            enabled={!!live.connected && !!live.device?.online && !!live.device.is_enabled}
+            enabled={!!deviceCode && (live.device?.online ?? true) && live.device?.is_enabled !== false}
             commandStatus={live.command?.status} error={live.commandError} onCommand={live.sendRelay} />
           <TotalUsageCard latest={live.latest} />
           <PowerFactorCard latest={live.latest} history={live.history} />
